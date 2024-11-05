@@ -15,6 +15,17 @@ import seaborn as sns
 from mudata import MuData
 from . import tools
 
+def _rbf_gaussian(dist, center = 0, window_length = 1e5, width = 0.2, offset = 0.25):
+    """
+    Gaussian Radial Basis Function 
+    dist: input data 
+    center: center of the RBF
+    width: shape parameter (controls the width of the Gaussian)
+    offset: minimum asymptotic weight (values on unit interval)
+    """
+    scaled_dist = (dist - center) / window_length
+    res = (1-offset) * np.exp(-np.linalg.norm(scaled_dist)**2/(2*width**2)) + offset
+    return res
 
 def _average_peaks(
     adata: AnnData,
@@ -94,6 +105,27 @@ def _average_peaks(
                             )
                         else:
                             x[attr_name] = np.asarray(avg_func(adata.X[:, p], axis=1)).reshape(-1)
+            elif average == "weighted":
+                #set params for rbf kernel estimate
+                
+                
+                attr_name = f"{key} (weighted peaks)"
+                attr_names.append(attr_name)
+                tmp_names.append(attr_name)
+
+                if attr_name not in adata.obs.columns:
+                    if layer:
+                        x[attr_name] = np.asarray(
+                            _rbf_gaussian(adata.layers[layer][:, peaksidx], axis=1)
+                        ).reshape(-1)
+                    elif use_raw:
+                        x[attr_name] = np.asarray(
+                           _rbf_gaussian(adata.raw.X[:, peaksidx], axis=1)
+                        ).reshape(-1)
+                    else:
+                        x[attr_name] = np.asarray(_rbf_gaussian(adata.X[:, peaksidx], axis=1)).reshape(
+                            -1
+                        )
 
             else:
                 # No averaging, one plot per peak
@@ -294,7 +326,7 @@ def tss_enrichment(
     ax.set_xlabel("Distance from TSS, bp")
     ax.set_ylabel("Average TSS enrichment score")
     if color:
-        ax.legend(loc="upper right", title=", ".join(color))
+        ax.legend(bbox_to_anchor=(1, 1.05), title=", ".join(color))
     plt.show()
     return None
 
