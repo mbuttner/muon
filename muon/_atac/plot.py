@@ -15,17 +15,28 @@ import seaborn as sns
 from mudata import MuData
 from . import tools
 
-def _rbf_gaussian(dist, center = 0, window_length = 1e5, width = 0.2, offset = 0.25):
+def _rbf_gaussian(
+    dist: np.array, 
+    center: Optional[float] = 0, 
+    window_length: Optional[float] = 1e5, 
+    width: Optional[float] = 0.1, 
+    offset: Optional[float] = 0.25,
+    ):
     """
     Gaussian Radial Basis Function 
     dist: input data 
     center: center of the RBF
+    window_length: maximum distance from center, used as scaling factor
     width: shape parameter (controls the width of the Gaussian)
     offset: minimum asymptotic weight (values on unit interval)
     """
     scaled_dist = (dist - center) / window_length
-    res = (1-offset) * np.exp(-np.linalg.norm(scaled_dist)**2/(2*width**2)) + offset
-    return res
+    #drop all scaled distances >1 or <-1
+    scaled_dist = scaled_dist[np.abs(scaled_dist)<=1]
+    #compute rbf weights and normalize
+    res = (1-offset) * np.exp(-(scaled_dist)**2/(2*width**2)) + offset
+    res_norm = res / np.sum(res, axis=0)
+    return res_norm
 
 def _average_peaks(
     adata: AnnData,
@@ -106,24 +117,25 @@ def _average_peaks(
                         else:
                             x[attr_name] = np.asarray(avg_func(adata.X[:, p], axis=1)).reshape(-1)
             elif average == "weighted":
-                #set params for rbf kernel estimate
+                #get distances from peak annotation dataframe
+                distances = peak_sel[['peak','distance']].set_index('peak')
+                weights =  _rbf_gaussian(distances)
                 
-                
-                attr_name = f"{key} (weighted peaks)"
+                attr_name = f"{key} (rbf weighted peaks)"
                 attr_names.append(attr_name)
                 tmp_names.append(attr_name)
 
                 if attr_name not in adata.obs.columns:
                     if layer:
                         x[attr_name] = np.asarray(
-                            _rbf_gaussian(adata.layers[layer][:, peaksidx], axis=1)
+                            adata.layers[layer][:, peaksidx] * weights
                         ).reshape(-1)
                     elif use_raw:
                         x[attr_name] = np.asarray(
-                           _rbf_gaussian(adata.raw.X[:, peaksidx], axis=1)
+                           adata.raw.X[:, peaksidx] * weights
                         ).reshape(-1)
                     else:
-                        x[attr_name] = np.asarray(_rbf_gaussian(adata.X[:, peaksidx], axis=1)).reshape(
+                        x[attr_name] = np.asarray(adata.X[:, peaksidx]  * weights).reshape(
                             -1
                         )
 
@@ -252,6 +264,9 @@ def dotplot(
     func: Optional[str] = "mean",
     use_raw: Optional[Union[bool]] = None,
     layer: Optional[str] = None,
+    return_fig: Optional[bool] = False,
+    show: Optional[bool] = True,
+    save: Optional[str] = None,
     **kwargs,
 ):
     """
@@ -282,9 +297,20 @@ def dotplot(
         layer=layer,
     )
     ad = AnnData(x, obs=adata.obs)
-    sc.pl.dotplot(ad, var_names=attr_names, groupby=groupby, **kwargs)
+    dp = sc.pl.dotplot(ad, 
+                       var_names=attr_names, 
+                       groupby=groupby,
+                       show=False,
+                       return_fig=True,
+                       **kwargs)
 
-    return None
+    if return_fig:
+        return dp
+    else:
+        sc.pl._utils.savefig_or_show(dp.DEFAULT_SAVE_PREFIX, show=show, save=save)
+        show = sc.pl._settings.settings.autoshow if show is None else show
+        if not show:
+            return dp.get_axes()
 
 
 def tss_enrichment(
