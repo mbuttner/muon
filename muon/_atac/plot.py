@@ -265,7 +265,7 @@ def dotplot(
     use_raw: Optional[Union[bool]] = None,
     layer: Optional[str] = None,
     return_fig: Optional[bool] = False,
-    show: Optional[bool] = True,
+    show: Optional[Union[bool]] = None,
     save: Optional[str] = None,
     **kwargs,
 ):
