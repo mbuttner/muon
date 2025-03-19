@@ -592,7 +592,7 @@ def neighbors(
     neighbordistances = _sparse_csr_fast_knn(neighbordistances, n_neighbors + 1)
 
     logging.info("Calculating connectivities...")
-    _, connectivities = _compute_connectivities_umap(
+    connectivities = _compute_connectivities_umap(
         knn_indices=neighbordistances.indices.reshape(
             (neighbordistances.shape[0], n_neighbors + 1)
         ),

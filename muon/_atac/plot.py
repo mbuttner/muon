@@ -34,6 +34,9 @@ def _rbf_gaussian(
     scaled_dist = (dist - center) / window_length
     # drop all scaled distances >1 or <-1
     scaled_dist = scaled_dist[np.abs(scaled_dist) <= 1]
+    #return minimum weight, i.e. offset if all associated peaks are too distant
+    if len(scaled_dist)==0:
+        return offset
     # compute rbf weights and normalize
     res = (1 - offset) * np.exp(-((scaled_dist) ** 2) / (2 * width**2)) + offset
     res_norm = res / np.sum(res, axis=0)
@@ -119,8 +122,11 @@ def _average_peaks(
                         else:
                             x[attr_name] = np.asarray(avg_func(adata.X[:, p], axis=1)).reshape(-1)
             elif average == "weighted":
+                # print(key)
                 # get distances from peak annotation dataframe
                 distances = peak_sel[["peak", "distance"]].set_index("peak")
+                if len(distances)==0: 
+                    continue
                 weights = _rbf_gaussian(distances)
 
                 attr_name = f"{key} (rbf weighted peaks)"
